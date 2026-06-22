@@ -134,6 +134,11 @@ const exportSpecs = {}; // canvas id -> paper-themed export spec (for PNG downlo
 let latest = null;
 let comparison = null;
 let selectedRun = null; // null = active run; otherwise a run id (string)
+// Static snapshot mode: when built by scripts/dashboard-build-static.mjs the page
+// carries ALL run data inline (window.__DASHBOARD_DATA__) and runs with no server
+// — that is the GitHub Pages / shareable-file build. Absent ⇒ normal live server.
+const EMBED = (typeof window !== 'undefined' && window.__DASHBOARD_DATA__) || null;
+const STATIC = !!EMBED;
 
 Chart.defaults.color = '#8b949e';
 Chart.defaults.borderColor = '#283039';
@@ -388,6 +393,7 @@ function renderComparison(){
 
 let lastCmp=0;
 async function loadComparison(){
+  if(STATIC){ comparison = EMBED.compare; renderComparison(); return; }
   try{ const r=await fetch('/api/compare'); comparison=await r.json(); renderComparison(); }catch(e){}
 }
 function maybeLoadComparison(){ const t=Date.now(); if(t-lastCmp<1500) return; lastCmp=t; loadComparison(); }
@@ -523,7 +529,7 @@ function populateRunSelect(d){
   if (runSelect.dataset.sig !== sig){
     runSelect.dataset.sig = sig;
     runSelect.innerHTML = runs.map(r=>{
-      const tag = r.activeNow ? ' (live)' : '';
+      const tag = (!STATIC && r.activeNow) ? ' (live)' : '';
       return `<option value="${r.id}">${r.label}${tag}</option>`;
     }).join('');
   }
@@ -531,7 +537,7 @@ function populateRunSelect(d){
 }
 runSelect.addEventListener('change', ()=>{ selectedRun = runSelect.value; reconnect(); });
 
-// live connection (SSE) with polling fallback
+// Data source: a live server (SSE + REST) OR a baked static snapshot (STATIC).
 const dot = document.getElementById('dot'), livetxt = document.getElementById('livetxt');
 function setLive(on){ dot.classList.toggle('on',on); livetxt.textContent = on?'live':'getrennt — poll'; }
 const runQuery = ()=> selectedRun==null ? '' : ('?run='+encodeURIComponent(selectedRun));
@@ -544,10 +550,26 @@ function connect() {
     es.onerror = ()=>{ setLive(false); es.close(); if(activeES===es){ setTimeout(connect,3000); poll(); } };
   } catch { poll(); }
 }
-function reconnect(){ if(activeES){ try{activeES.close();}catch{} activeES=null; } poll(); connect(); }
 async function poll(){ try{ const r=await fetch('/api/data'+runQuery()); render(await r.json()); }catch{} }
-connect();
-loadComparison(); // cross-run comparison is independent of the selected run
+// Static snapshot: render the selected run straight from the embedded blob.
+function pollStatic(){
+  const id = selectedRun!=null ? String(selectedRun) : String(EMBED.activeId);
+  const d = EMBED.byRun[id] || EMBED.byRun[String(EMBED.activeId)] || Object.values(EMBED.byRun)[0];
+  if(d) render(d);
+}
+function reconnect(){
+  if(STATIC){ pollStatic(); return; }
+  if(activeES){ try{activeES.close();}catch{} activeES=null; } poll(); connect();
+}
+if(STATIC){
+  dot.classList.remove('on'); livetxt.textContent = 'Snapshot';
+  if(selectedRun==null && EMBED.activeId!=null) selectedRun=String(EMBED.activeId);
+  pollStatic();
+  loadComparison();
+} else {
+  connect();
+  loadComparison(); // cross-run comparison is independent of the selected run
+}
 </script>
 </body>
 </html>
