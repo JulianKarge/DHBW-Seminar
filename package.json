@@ -1,0 +1,24 @@
+{
+  "name": "dhbw-seminar",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dashboard": "node scripts/dashboard-server.mjs",
+    "dashboard:data": "node scripts/lib/dashboard-data.mjs --out temp/dashboard/data.json",
+    "dashboard:runs": "node scripts/dashboard-runs.mjs list",
+    "dashboard:archive": "node scripts/dashboard-runs.mjs archive"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1"
+  },
+  "dependencies": {
+    "chart.js": "^4.5.1",
+    "xlsx": "^0.18.5"
+  }
+}

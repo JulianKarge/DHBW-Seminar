@@ -1,0 +1,30 @@
+{
+  "//": "Per-game dashboard config. Copy to `dashboard.config.json` (project root) and edit ONLY the keys you need to override for a different TOPSIM game/company. Every key is optional — anything omitted auto-detects (sheets by column shape) or falls back (headline/market lists). Delete this comment block in the real file (JSON has no comments; the `//` keys are ignored by the loader but keep the file valid).",
+
+  "//executiveSheetHint": "Case-insensitive substring of the per-period KPI sheet (your company, periods as columns). If it doesn't match, the sheet is found structurally (the one with 'Periode N' column headers). GM default:",
+  "executiveSheetHint": "Executive Summary",
+
+  "//marketSheetHint": "Substring of the competitor sheet (rivals as columns). Falls back to the sheet that has company columns. GM default:",
+  "marketSheetHint": "Marktforschungsbericht",
+
+  "//companyPattern": "Regex (source) for a competitor column header. Change if a game labels teams differently than U1/U2.",
+  "companyPattern": "^U\\d+$",
+
+  "//aggregatePattern": "Regex for the average/sum column header in the market sheet.",
+  "aggregatePattern": "ø|Durchschnitt|Summe|Mittel|Average",
+
+  "//headlineKpis": "Substrings matched against KPI labels → the headline cards (in this order). No match → first 8 KPIs. Set this to the new game's north-star + key KPIs.",
+  "headlineKpis": [
+    "Aktienkurs", "Marktanteil", "Umsatzrendite", "Periodenüberschuss",
+    "Bekanntheit", "Kundenzufriedenheit", "Auslastung Mitarbeiter", "Fremdkapitalquote"
+  ],
+
+  "//marketChartMetrics": "Market metrics that get an own-vs-rival line chart. No match → first 6 present.",
+  "marketChartMetrics": [
+    "Marktanteil", "Preis", "Werbung", "Bekanntheit", "Kundenzufriedenheit", "Tatsächlicher Absatz"
+  ],
+
+  "//plannedKpi / actualKpi": "Labels for the Plan-vs-Ist cross-check. Skipped silently if not found in the new game.",
+  "plannedKpi": "Geplanter Absatz",
+  "actualKpi": "Tatsächlicher Absatz"
+}

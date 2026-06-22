@@ -1,0 +1,18 @@
+
+# Secrets / local credentials
+credentials.local.md
+*.local.md
+.env
+.env.*
+
+# Throwaway task data / exploration artifacts
+temp/
+artifacts/
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TOPSIM — KI als Manager · Live Dashboard</title>
+<style>
+  :root {
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c232c; --line:#283039;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --good:#3fb950; --bad:#f85149; --warn:#d29922;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+    font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  header { padding:14px 22px; border-bottom:1px solid var(--line); display:flex;
+    align-items:center; gap:16px; flex-wrap:wrap; background:var(--panel); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  .runpick { display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
+  .runpick label { text-transform:uppercase; letter-spacing:.4px; font-size:10.5px; }
+  .runpick select { padding:4px 8px; font-size:12.5px; font-weight:600; }
+  .meta { color:var(--muted); font-size:12.5px; display:flex; gap:14px; flex-wrap:wrap; }
+  .meta b { color:var(--txt); font-weight:600; }
+  .live { margin-left:auto; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--bad); transition:.3s; }
+  .dot.on { background:var(--good); box-shadow:0 0 8px var(--good); }
+  main { padding:20px 22px 60px; max-width:1500px; margin:0 auto; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--muted);
+    margin:30px 0 12px; font-weight:600; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px; }
+  .card .k { color:var(--muted); font-size:12px; margin-bottom:6px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .card .v { font-size:23px; font-weight:680; }
+  .card .v small { font-size:12px; color:var(--muted); font-weight:500; margin-left:3px; }
+  .badge { display:inline-block; margin-top:7px; font-size:12px; padding:2px 8px; border-radius:20px;
+    background:var(--panel2); color:var(--muted); }
+  .badge.up { color:var(--good); } .badge.down { color:var(--bad); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
+  .chartbox { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .chartbox .t { font-size:12.5px; color:var(--muted); margin-bottom:8px; }
+  canvas { width:100% !important; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  select { background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:7px; padding:6px 10px; font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pos { color:var(--good); } .neg { color:var(--bad); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px 4px; overflow:auto; }
+  .empty { color:var(--muted); padding:24px; text-align:center; }
+  .pill { font-size:11px; padding:1px 7px; border-radius:20px; background:var(--panel2); color:var(--muted); }
+  /* PNG export buttons + comparison section */
+  .dlbtn { background:var(--panel2); color:var(--accent); border:1px solid var(--line);
+    border-radius:6px; padding:3px 9px; font-size:11px; font-weight:600; cursor:pointer;
+    letter-spacing:.3px; transition:.15s; }
+  .dlbtn:hover { background:var(--accent); color:#0d1117; border-color:var(--accent); }
+  .dlbtn.big { padding:5px 12px; font-size:12px; margin-left:10px; vertical-align:middle; }
+  .chartbox .t { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .chartbox .t .dlbtn { flex:none; }
+  .panelhead { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 12px 4px; }
+  .panelhead .ttl { font-size:12.5px; color:var(--muted); font-weight:600;
+    text-transform:uppercase; letter-spacing:.5px; }
+  .cmp-divider { border:0; border-top:1px solid var(--line); margin:34px 0 0; }
+  h2 .winner { color:var(--good); font-weight:700; }
+  td.win { background:rgba(63,185,80,.10); }
+  .runtag { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px;
+    vertical-align:middle; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TOPSIM · <span style="color:var(--accent)">KI als Manager</span></h1>
+  <div class="runpick"><label for="runSelect">Run</label><select id="runSelect" title="Simulationslauf wählen"></select></div>
+  <div class="meta" id="meta"></div>
+  <div class="live"><span class="dot" id="dot"></span><span id="livetxt">verbinde…</span></div>
+</header>
+<main>
+  <!-- ===== Cross-run comparison (thesis: AI-manager performance, run vs run) ===== -->
+  <section id="cmpSection">
+    <h2>Modell-Vergleich · Runs im Gesamtspiel
+      <span class="pill" id="cmpPill"></span>
+      <button class="dlbtn big" id="cmpExportAll" title="Alle Vergleichs-Diagramme als PNG exportieren">⤓ alle Diagramme (PNG)</button>
+    </h2>
+    <div class="cards" id="cmpCards"></div>
+    <div class="panel" id="cmpSummaryPanel" style="margin-top:14px"></div>
+    <div class="panel" id="cmpPredPanel" style="margin-top:14px"></div>
+    <div class="grid" id="cmpCharts" style="margin-top:14px"></div>
+    <hr class="cmp-divider" />
+  </section>
+
+  <h2>Headline-KPIs <span class="pill" id="periodPill"></span></h2>
+  <div class="cards" id="cards"></div>
+
+  <h2>KPI-Verläufe (Headline)</h2>
+  <div class="grid" id="headlineCharts"></div>
+
+  <h2>KPI-Explorer</h2>
+  <div class="chartbox">
+    <div class="row" style="margin-bottom:8px;justify-content:space-between">
+      <select id="kpiSelect"></select>
+      <button class="dlbtn" data-canvas="explorer">⤓ PNG</button>
+    </div>
+    <canvas id="explorer" height="110"></canvas>
+  </div>
+
+  <h2>Markt &amp; Wettbewerb <span class="pill" id="ownPill"></span>
+    <button class="dlbtn big" data-table="marketPanel" data-title="Markt &amp; Wettbewerb">⤓ Tabelle als PNG</button></h2>
+  <div class="grid" id="marketCharts"></div>
+  <div class="panel" id="marketPanel" style="margin-top:14px"></div>
+
+  <h2>Plan-Treue · Geplanter vs. tatsächlicher Absatz
+    <button class="dlbtn big" data-table="derivedPanel" data-title="Plan-Treue – Geplanter vs. tatsächlicher Absatz">⤓ Tabelle als PNG</button></h2>
+  <div class="panel" id="derivedPanel"></div>
+
+  <h2>Prognose vs. Ist (Scoring)
+    <button class="dlbtn big" data-table="predPanel" data-title="Prognose vs. Ist (Scoring)">⤓ Tabelle als PNG</button></h2>
+  <div class="panel" id="predPanel"></div>
+
+  <h2>Entscheidungen pro Periode
+    <button class="dlbtn big" data-table="decPanel" data-title="Entscheidungen pro Periode">⤓ Tabelle als PNG</button></h2>
+  <div class="row" style="margin-bottom:10px"><select id="decSelect"></select></div>
+  <div class="panel" id="decPanel"></div>
+</main>
+
+<script src="/vendor/chart.js"></script>
+<script>
+const PALETTE = ['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39c5cf','#ff7b72','#7ee787'];
+const fmt = (n, d=2) => n==null||Number.isNaN(n) ? '—'
+  : n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:d});
+const charts = {}; // id -> Chart instance
+const exportSpecs = {}; // canvas id -> paper-themed export spec (for PNG download)
+let latest = null;
+let comparison = null;
+let selectedRun = null; // null = active run; otherwise a run id (string)
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#283039';
+Chart.defaults.font.family = 'Segoe UI, Roboto, sans-serif';
+
+function lineChart(canvas, label, points, color, opts={}) {
+  if (charts[canvas.id]) charts[canvas.id].destroy();
+  const labels = points.map(p=>'P'+p.period);
+  charts[canvas.id] = new Chart(canvas, {
+    type:'line',
+    data:{ labels,
+      datasets:[{ label, data: points.map(p=>p.value), borderColor:color,
+        backgroundColor:color+'22', fill:true, tension:.25, pointRadius:3, borderWidth:2 }] },
+    options:{ responsive:true, plugins:{ legend:{ display:false } },
+      scales:{ x:{ grid:{ display:false } }, y:{ grid:{ color:'#21262d' }, ticks:{ maxTicksLimit:5 } } } }
+  });
+  exportSpecs[canvas.id] = { type:'line', labels, title: opts.title||label, xLabel:'Periode',
+    yLabel: opts.unit||'', datasets:[{ label, values: points.map(p=>p.value), color, fill:true }] };
+}
+
+function multiLine(canvas, datasets, opts={}) {
+  if (charts[canvas.id]) charts[canvas.id].destroy();
+  const periods = [...new Set(datasets.flatMap(ds=>ds.points.map(p=>p.period)))].sort((a,b)=>a-b);
+  const labels = periods.map(p=>'P'+p);
+  const valuesOf = (ds)=> periods.map(p=>{const pt=ds.points.find(x=>x.period===p);return pt?pt.value:null;});
+  charts[canvas.id] = new Chart(canvas, {
+    type:'line',
+    data:{ labels,
+      datasets: datasets.map((ds,i)=>({ label:ds.label, data: valuesOf(ds),
+        borderColor:ds.color, backgroundColor:ds.color+'18', borderWidth:ds.own?3:2,
+        borderDash:ds.own?[]:[5,4], tension:.25, pointRadius:3, spanGaps:true })) },
+    options:{ responsive:true, plugins:{ legend:{ display:true, labels:{ boxWidth:12, font:{size:11} } } },
+      scales:{ x:{ grid:{ display:false } }, y:{ grid:{ color:'#21262d' }, ticks:{ maxTicksLimit:5 } } } }
+  });
+  exportSpecs[canvas.id] = { type:'line', labels, title: opts.title||'', xLabel:'Periode',
+    yLabel: opts.unit||'', showLegend:true,
+    datasets: datasets.map(ds=>({ label: ds.label, values: valuesOf(ds), color: ds.color,
+      dash: ds.own?[]:[6,4], width: ds.own?3:2 })) };
+}
+
+function render(d) {
+  latest = d;
+  // Which market metrics get a competitor chart — game-agnostic, from aggregator.
+  const MARKET_CHARTS = (d.ui && d.ui.marketChartMetrics) || [];
+  if (d.error) { document.getElementById('cards').innerHTML =
+    `<div class="empty">Aggregator-Fehler: ${d.error}</div>`; return; }
+  populateRunSelect(d);
+  const m = d.meta || {};
+  document.getElementById('meta').innerHTML =
+    [['Spiel',m.game],['Team',m.team],['Unternehmen',m.company],['Periode',m.currentPeriod]]
+      .filter(([,v])=>v!=null).map(([k,v])=>`${k}: <b>${v}</b>`).join('') +
+    ` &nbsp;·&nbsp; Stand ${new Date(d.generatedAt).toLocaleTimeString('de-DE')}`;
+  document.getElementById('periodPill').textContent = 'Perioden ' + (d.periods.join(', ')||'—');
+
+  // headline cards
+  const headline = Object.entries(d.kpis).filter(([,k])=>k.headline);
+  document.getElementById('cards').innerHTML = headline.map(([name,k])=>{
+    const g = k.latestGrowthPct;
+    const cls = g==null?'':(g>0?'up':g<0?'down':'');
+    const arrow = g==null?'':(g>0?'▲':g<0?'▼':'•');
+    const badge = g==null?'<span class="badge">erste Periode</span>'
+      : `<span class="badge ${cls}">${arrow} ${fmt(Math.abs(g),1)}% vs. Vorperiode</span>`;
+    return `<div class="card"><div class="k" title="${name}">${name}</div>
+      <div class="v">${fmt(k.latest?.value)}<small>${k.unit||''}</small></div>${badge}</div>`;
+  }).join('') || '<div class="empty">Noch keine KPI-Daten.</div>';
+
+  // headline charts
+  const hc = document.getElementById('headlineCharts');
+  hc.innerHTML = headline.map(([name],i)=>
+    `<div class="chartbox"><div class="t"><span>${name}</span><button class="dlbtn" data-canvas="hc${i}">⤓ PNG</button></div><canvas id="hc${i}" height="150"></canvas></div>`).join('');
+  headline.forEach(([name,k],i)=>lineChart(document.getElementById('hc'+i), name, k.points, PALETTE[i%PALETTE.length], {unit:k.unit, title:name}));
+
+  // explorer select (preserve selection)
+  const sel = document.getElementById('kpiSelect');
+  const prev = sel.value;
+  sel.innerHTML = Object.keys(d.kpis).sort().map(n=>`<option>${n}</option>`).join('');
+  if (prev && d.kpis[prev]) sel.value = prev;
+  drawExplorer();
+
+  // market & competitor
+  const own = d.meta?.ownCompany;
+  document.getElementById('ownPill').textContent = own ? ('eigenes Unternehmen: '+own) : '';
+  const market = d.market || {};
+  const allCompanies = [...new Set(Object.values(market).flatMap(m=>m.companies||[]))].sort();
+  const mc = document.getElementById('marketCharts');
+  mc.innerHTML = MARKET_CHARTS.filter(n=>market[n]).map((n,i)=>
+    `<div class="chartbox"><div class="t"><span>${n} (U-Vergleich)</span><button class="dlbtn" data-canvas="mk${i}">⤓ PNG</button></div><canvas id="mk${i}" height="150"></canvas></div>`).join('');
+  MARKET_CHARTS.filter(n=>market[n]).forEach((n,i)=>{
+    const m = market[n];
+    const datasets = (m.companies||[]).map((c,ci)=>({ label: c+(c===own?' (du)':''), own:c===own,
+      color: c===own ? '#3fb950' : PALETTE[(ci+2)%PALETTE.length],
+      points: m.points.map(p=>({period:p.period, value:p.byCompany[c]})) }));
+    multiLine(document.getElementById('mk'+i), datasets, {unit:m.unit, title:n+' (U-Vergleich)'});
+  });
+  const mp = document.getElementById('marketPanel');
+  if (!Object.keys(market).length) mp.innerHTML = '<div class="empty">Noch kein Marktforschungsbericht erfasst.</div>';
+  else mp.innerHTML = `<table><thead><tr><th>Marktkennzahl</th><th>Einheit</th>` +
+    allCompanies.map(c=>`<th class="num">${c}${c===own?' ★':''}</th>`).join('') + `<th class="num">ø</th></tr></thead><tbody>` +
+    Object.entries(market).map(([name,m])=>{
+      const last = m.points.at(-1) || {byCompany:{},avg:null};
+      return `<tr><td>${name}</td><td style="color:var(--muted)">${m.unit||''}</td>` +
+        allCompanies.map(c=>{const v=last.byCompany[c];
+          return `<td class="num"${c===own?' style="color:var(--good)"':''}>${v==null?'—':fmt(v)}</td>`;}).join('') +
+        `<td class="num" style="color:var(--muted)">${last.avg==null?'—':fmt(last.avg)}</td></tr>`;
+    }).join('') + '</tbody></table>';
+
+  // derived — plan vs actual sales
+  const dp = document.getElementById('derivedPanel');
+  const pt = d.derived?.planTreueAbsatz;
+  if (!pt?.length) dp.innerHTML = '<div class="empty">Noch keine Plan/Ist-Daten.</div>';
+  else dp.innerHTML = `<table><thead><tr><th>Periode</th><th class="num">Geplant</th>
+      <th class="num">Tatsächlich</th><th class="num">Erfüllung</th></tr></thead><tbody>` +
+    pt.map(r=>{const e=r.erfuellungPct; const c=e==null?'':(e>=95&&e<=105?'pos':'neg');
+      return `<tr><td>P${r.period}</td><td class="num">${fmt(r.geplant)}</td>
+        <td class="num">${fmt(r.tatsaechlich)}</td>
+        <td class="num ${c}">${e==null?'—':fmt(e,1)+'%'}</td></tr>`;}).join('') + '</tbody></table>';
+
+  // predictions / scoring
+  const pp = document.getElementById('predPanel');
+  if (!d.predictions?.length) pp.innerHTML = '<div class="empty">Noch keine Prognosen.</div>';
+  else pp.innerHTML = `<table><thead><tr>
+      <th>Periode</th><th>KPI</th><th class="num">Prognose</th><th class="num">Ist</th>
+      <th class="num">Fehler</th><th class="num">Konfidenz</th><th>Begründung</th></tr></thead><tbody>` +
+    d.predictions.map(p=>{
+      const err = p.errorPct;
+      const ec = err==null?'':(Math.abs(err)<=10?'pos':'neg');
+      return `<tr><td>P${p.period}</td><td>${p.kpi}</td>
+        <td class="num">${fmt(p.predicted)}</td><td class="num">${fmt(p.actual)}</td>
+        <td class="num ${ec}">${err==null?'—':fmt(err,1)+'%'}</td>
+        <td class="num">${p.confidence==null?'—':(typeof p.confidence==='number'?Math.round(p.confidence*100)+'%':p.confidence)}</td>
+        <td style="color:var(--muted);max-width:380px">${p.rationale||''}</td></tr>`;
+    }).join('') + '</tbody></table>';
+
+  // decisions select + table
+  const ds = document.getElementById('decSelect');
+  const periods = Object.keys(d.decisionsByPeriod||{}).sort((a,b)=>b-a);
+  const dprev = ds.value;
+  ds.innerHTML = periods.map(p=>`<option value="${p}">Periode ${p}</option>`).join('')
+    || '<option>—</option>';
+  if (dprev && d.decisionsByPeriod[dprev]) ds.value = dprev;
+  drawDecisions();
+}
+
+function drawExplorer() {
+  if (!latest) return;
+  const name = document.getElementById('kpiSelect').value;
+  const k = latest.kpis[name];
+  if (k) lineChart(document.getElementById('explorer'), name, k.points, '#58a6ff');
+}
+function drawDecisions() {
+  if (!latest) return;
+  const p = document.getElementById('decSelect').value;
+  const rows = (latest.decisionsByPeriod||{})[p] || [];
+  const el = document.getElementById('decPanel');
+  if (!rows.length) { el.innerHTML = '<div class="empty">Keine Entscheidungen erfasst.</div>'; return; }
+  const cell = (x)=> typeof x==='boolean' ? (x?'✓':'✗') : (typeof x==='number'?fmt(x):x);
+  el.innerHTML = `<table><thead><tr><th>Tab</th><th>Hebel</th><th class="num">Alt</th><th class="num">Neu</th><th>Geändert</th></tr></thead><tbody>` +
+    rows.map(r=>{
+      const v = r.value;
+      const isObj = v && typeof v==='object';
+      const oldV = isObj ? cell(v.old) : '—';
+      const newV = isObj ? cell(v.new) : cell(v);
+      const ch = isObj && v.changed;
+      return `<tr${ch?' style="background:rgba(63,185,80,.08)"':''}><td><span class="pill">${r.tab}</span></td><td>${r.field}</td>
+      <td class="num" style="color:var(--muted)">${oldV}</td>
+      <td class="num"${ch?' style="color:var(--good);font-weight:600"':''}>${newV}</td>
+      <td>${ch?'● ja':'—'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
+// ===================== Cross-run comparison (Modell-Vergleich) =====================
+const RUN_COLORS = ['#58a6ff','#f0883e','#3fb950','#bc8cff','#39c5cf','#ff7b72'];
+function runColor(id){
+  const i = (comparison?.runs||[]).findIndex(r=>String(r.id)===String(id));
+  return RUN_COLORS[(i<0?0:i)%RUN_COLORS.length];
+}
+
+function renderComparison(){
+  const cards=document.getElementById('cmpCards'), sp=document.getElementById('cmpSummaryPanel'),
+        pp=document.getElementById('cmpPredPanel'), cc=document.getElementById('cmpCharts');
+  if(!comparison || comparison.error || !(comparison.runs||[]).length){
+    cards.innerHTML = '<div class="empty">'+(comparison&&comparison.error
+      ? 'Vergleich-Fehler: '+comparison.error : 'Noch keine Runs zum Vergleichen.')+'</div>';
+    sp.innerHTML=''; pp.innerHTML=''; cc.innerHTML=''; return;
+  }
+  const runs=comparison.runs, kpis=comparison.kpis, summary=comparison.summary, primary='Aktienkurs';
+  const m0=runs[0]||{};
+  document.getElementById('cmpPill').textContent =
+    runs.length+' Runs'+(m0.ownCompany?(' · '+m0.ownCompany):'')+(m0.game?(' · '+m0.game):'');
+
+  // Cards: one per run, primary KPI (Aktienkurs) headline.
+  const pUnit = kpis[primary]?.unit || '';
+  const finals = runs.map(r=>summary[r.id]?.kpiStats?.[primary]?.final).filter(v=>v!=null);
+  const bestFinal = finals.length ? Math.max(...finals) : null;
+  cards.innerHTML = runs.map(r=>{
+    const s=summary[r.id]?.kpiStats?.[primary]; if(!s) return '';
+    const g=s.totalGrowthPct, cls=g==null?'':(g>0?'up':g<0?'down':''), arrow=g==null?'•':(g>0?'▲':'▼');
+    const last=(r.periods||[]).at(-1);
+    const isBest = runs.length>1 && bestFinal!=null && s.final===bestFinal;
+    return `<div class="card" style="border-color:${runColor(r.id)}66">
+      <div class="k" title="${r.label}"><span class="runtag" style="background:${runColor(r.id)}"></span>${r.label}${r.activeNow?' · live':''}</div>
+      <div class="v">${fmt(s.final)}<small>${pUnit}</small></div>
+      <span class="badge ${cls}">${arrow} ${g==null?'—':fmt(Math.abs(g),1)+'%'} (P0→P${last})</span>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--muted);line-height:1.5">
+        Peak ${fmt(s.peak)} · P${s.peakPeriod}<br>Tief ${fmt(s.trough)} · P${s.troughPeriod} &nbsp; ø ${fmt(s.avg)}
+        ${isBest?'<br><span style="color:var(--good);font-weight:600">★ höchster Endwert</span>':''}
+      </div></div>`;
+  }).join('') || '<div class="empty">Keine Aktienkurs-Daten.</div>';
+
+  // Summary table: KPI rows × run columns (Endwert + Gesamt-Wachstum). Winner of
+  // the thesis KPI (Aktienkurs) is highlighted.
+  const colHead = runs.map(r=>`<th class="num" style="color:${runColor(r.id)}">${r.label}</th>`).join('');
+  const bodyRows = comparison.headlineKpis.map(name=>{
+    const unit=kpis[name]?.unit||'';
+    let bestId=null;
+    if(name===primary){ let bf=-Infinity; runs.forEach(r=>{const f=summary[r.id]?.kpiStats?.[name]?.final;
+      if(f!=null&&f>bf){bf=f;bestId=r.id;}}); }
+    const cells=runs.map(r=>{
+      const s=summary[r.id]?.kpiStats?.[name];
+      if(!s) return '<td class="num">—</td>';
+      const g=s.totalGrowthPct, gc=g==null?'':(g>0?'pos':'neg');
+      const win=(bestId!=null&&r.id===bestId)?' win':'';
+      return `<td class="num${win}"><b>${fmt(s.final)}</b> <span class="${gc}" style="font-size:11px">${g==null?'':((g>0?'+':'')+fmt(g,1)+'%')}</span></td>`;
+    }).join('');
+    return `<tr><td>${name}</td><td style="color:var(--muted)">${unit}</td>${cells}</tr>`;
+  }).join('');
+  sp.innerHTML = `<div class="panelhead"><span class="ttl">Endwerte &amp; Gesamt-Wachstum (P0 → letzte Periode)</span>
+      <button class="dlbtn" data-table="cmpSummaryPanel" data-title="Modell-Vergleich – Endwerte und Wachstum">⤓ Tabelle als PNG</button></div>
+    <table><thead><tr><th>KPI</th><th>Einheit</th>${colHead}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+
+  // Prediction-accuracy table (how well the AI manager forecast each run).
+  const predRows = runs.map(r=>{
+    const pr=summary[r.id]?.prediction||{};
+    return `<tr><td><span class="runtag" style="background:${runColor(r.id)}"></span>${r.label}</td>
+      <td class="num">${(pr.scored||0)} / ${(pr.total||0)}</td>
+      <td class="num">${pr.maePct==null?'—':fmt(pr.maePct,1)+'%'}</td>
+      <td class="num">${pr.hitRate10Pct==null?'—':fmt(pr.hitRate10Pct,0)+'%'}</td></tr>`;
+  }).join('');
+  pp.innerHTML = `<div class="panelhead"><span class="ttl">Prognosegüte des KI-Managers (Forecast vs. Ist)</span>
+      <button class="dlbtn" data-table="cmpPredPanel" data-title="Prognosegüte je Run">⤓ Tabelle als PNG</button></div>
+    <table><thead><tr><th>Run</th><th class="num">Prognosen (bewertet)</th><th class="num">MAE (Ø-Fehler)</th><th class="num">Trefferquote ±10%</th></tr></thead><tbody>${predRows}</tbody></table>`;
+
+  // Overlay charts: one per headline KPI, one solid line per run.
+  cc.innerHTML = comparison.headlineKpis.map((name,i)=>
+    `<div class="chartbox"><div class="t"><span>${name} — Run-Vergleich</span><button class="dlbtn" data-canvas="cmp${i}">⤓ PNG</button></div><canvas id="cmp${i}" height="150"></canvas></div>`).join('');
+  comparison.headlineKpis.forEach((name,i)=>{
+    const byRun=kpis[name]?.byRun||{};
+    const datasets=runs.map(r=>({ label:r.label, own:true, color:runColor(r.id), points:(byRun[r.id]||[]) }))
+      .filter(ds=>ds.points.length);
+    multiLine(document.getElementById('cmp'+i), datasets, {unit:kpis[name]?.unit, title:name+' — Run-Vergleich'});
+  });
+}
+
+let lastCmp=0;
+async function loadComparison(){
+  try{ const r=await fetch('/api/compare'); comparison=await r.json(); renderComparison(); }catch(e){}
+}
+function maybeLoadComparison(){ const t=Date.now(); if(t-lastCmp<1500) return; lastCmp=t; loadComparison(); }
+
+// ===================== PNG export (paper-quality, offline) =====================
+const slug = s => (s||'figur').replace(/[^\wÄÖÜäöüß.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+function triggerDownload(dataUrl, filename){
+  const a=document.createElement('a'); a.href=dataUrl; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+// Fills the canvas white so exported figures are paper-ready (not transparent/dark).
+const whiteBgPlugin = { id:'whiteBg', beforeDraw(chart){ const ctx=chart.ctx;
+  ctx.save(); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,chart.width,chart.height); ctx.restore(); } };
+
+// Rebuild a chart from its export spec on a white, dark-text, hi-DPI canvas → PNG.
+async function downloadChartPNG(spec, filename){
+  if(!spec) return;
+  const W=1400, H = spec.datasets.length>3 ? 800 : 720;
+  const holder=document.createElement('div');
+  holder.style.cssText='position:fixed;left:-99999px;top:0;width:'+W+'px;height:'+H+'px;background:#fff';
+  const cv=document.createElement('canvas'); cv.style.width=W+'px'; cv.style.height=H+'px';
+  holder.appendChild(cv); document.body.appendChild(holder);
+  const single = spec.datasets.length===1;
+  const chart=new Chart(cv,{
+    type:spec.type||'line',
+    data:{ labels:spec.labels, datasets: spec.datasets.map(ds=>({
+      label:ds.label, data:ds.values, borderColor:ds.color,
+      backgroundColor:(single&&ds.fill)?ds.color+'22':'transparent', fill:!!(single&&ds.fill),
+      borderWidth:ds.width||2.5, borderDash:ds.dash||[], tension:.25, pointRadius:3,
+      pointBackgroundColor:ds.color, spanGaps:true })) },
+    options:{ responsive:false, animation:false, devicePixelRatio:2, layout:{padding:18}, color:'#1f2328',
+      plugins:{
+        legend:{ display:(!single||!!spec.showLegend), labels:{color:'#1f2328',font:{size:13},boxWidth:14} },
+        title:{ display:!!spec.title, text:spec.title, color:'#111', font:{size:17,weight:'600'}, padding:{bottom:12} } },
+      scales:{
+        x:{ ticks:{color:'#444',font:{size:12}}, grid:{color:'#e6e9ec'}, title:{display:!!spec.xLabel,text:spec.xLabel,color:'#444',font:{size:12}} },
+        y:{ ticks:{color:'#444',font:{size:12}}, grid:{color:'#e6e9ec'}, title:{display:!!spec.yLabel,text:spec.yLabel,color:'#444',font:{size:12}} } } },
+    plugins:[whiteBgPlugin]
+  });
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  let url; try{ url=chart.toBase64Image('image/png',1); } finally { chart.destroy(); holder.remove(); }
+  if(url) triggerDownload(url, filename);
+}
+
+// Render any rendered <table> to a clean white PNG (numbers right-aligned,
+// +/- coloring preserved). Reuses the on-screen table so it always matches.
+function isLightColor(rgb){ const m=/(\d+),\s*(\d+),\s*(\d+)/.exec(rgb||''); if(!m) return false;
+  return (0.2126*+m[1]+0.7152*+m[2]+0.0722*+m[3])/255 > 0.55; }
+function htmlTableToPNG(table, title, filename){
+  if(!table){ return; }
+  const headers=[...table.querySelectorAll('thead th')].map(th=>({ text:th.textContent.trim(),
+    align: th.classList.contains('num')?'right':'left' }));
+  const cellColor=(td)=>{
+    if(td.classList.contains('pos')||td.querySelector('.pos')) return '#1a7f37';
+    if(td.classList.contains('neg')||td.querySelector('.neg')) return '#cf222e';
+    if(isLightColor(getComputedStyle(td).color)) return '#57606a';
+    return '#1f2328';
+  };
+  const rows=[...table.querySelectorAll('tbody tr')].map(tr=>[...tr.children].map(td=>({
+    text: td.textContent.trim().replace(/\s+/g,' '),
+    align: td.classList.contains('num')?'right':'left',
+    bold: !!td.querySelector('b'),
+    color: cellColor(td),
+  })));
+  drawTablePNG(headers, rows, title, filename);
+}
+function drawTablePNG(headers, rows, title, filename){
+  const scale=2, padX=14, rowH=30, headH=36, titleH=title?44:8, maxColW=520, font='14px Segoe UI, Arial, sans-serif';
+  const mc=document.createElement('canvas').getContext('2d');
+  const measure=(t,bold)=>{ mc.font=(bold?'bold ':'')+font; return mc.measureText(t).width; };
+  const colW=headers.map((h,ci)=>{ let w=measure(h.text,true);
+    for(const r of rows){ const c=r[ci]||{text:''}; w=Math.max(w, measure(c.text, c.bold)); }
+    return Math.min(maxColW, Math.ceil(w)+padX*2); });
+  const fit=(t,w,bold)=>{ if(measure(t,bold)<=w-padX*2) return t; let s=t;
+    while(s.length>1 && measure(s+'…',bold)>w-padX*2) s=s.slice(0,-1); return s+'…'; };
+  const totalW=colW.reduce((a,b)=>a+b,0), totalH=titleH+headH+rows.length*rowH+2;
+  const cv=document.createElement('canvas'); cv.width=totalW*scale; cv.height=totalH*scale;
+  const ctx=cv.getContext('2d'); ctx.scale(scale,scale); ctx.textBaseline='middle';
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,totalW,totalH);
+  let y=0;
+  if(title){ ctx.fillStyle='#111'; ctx.textAlign='left'; ctx.font='bold 18px Segoe UI, Arial';
+    ctx.fillText(title, padX, titleH/2+2); y=titleH; }
+  const draw=(text,align,x,w,h,yy)=>{ ctx.textAlign=align==='right'?'right':'left';
+    ctx.fillText(text, align==='right'? x+w-padX : x+padX, yy+h/2); };
+  ctx.fillStyle='#eef1f4'; ctx.fillRect(0,y,totalW,headH); ctx.fillStyle='#24292f'; ctx.font='bold '+font;
+  let x=0; headers.forEach((h,ci)=>{ draw(fit(h.text,colW[ci],true),h.align,x,colW[ci],headH,y); x+=colW[ci]; });
+  y+=headH;
+  rows.forEach((r,ri)=>{ ctx.fillStyle=ri%2?'#ffffff':'#f6f8fa'; ctx.fillRect(0,y,totalW,rowH);
+    x=0; headers.forEach((h,ci)=>{ const c=r[ci]||{text:''}; ctx.fillStyle=c.color||'#1f2328';
+      ctx.font=(c.bold?'bold ':'')+font; draw(fit(c.text,colW[ci],c.bold), c.align||'left', x, colW[ci], rowH, y); x+=colW[ci]; });
+    y+=rowH; });
+  ctx.strokeStyle='#d0d7de'; ctx.lineWidth=1; const top=title?titleH:0;
+  ctx.strokeRect(0.5, top+0.5, totalW-1, totalH-top-1);
+  ctx.beginPath(); ctx.moveTo(0,top+headH); ctx.lineTo(totalW,top+headH); ctx.stroke();
+  triggerDownload(cv.toDataURL('image/png'), filename);
+}
+
+async function downloadAllComparison(){
+  if(!comparison || !(comparison.headlineKpis||[]).length){ return; }
+  for(let i=0;i<comparison.headlineKpis.length;i++){
+    const spec=exportSpecs['cmp'+i];
+    if(spec){ await downloadChartPNG(spec, 'vergleich_'+slug(comparison.headlineKpis[i])+'.png'); await sleep(180); }
+  }
+  htmlTableToPNG(document.querySelector('#cmpSummaryPanel table'),'Modell-Vergleich – Endwerte und Wachstum','vergleich_endwerte_tabelle.png');
+  await sleep(180);
+  htmlTableToPNG(document.querySelector('#cmpPredPanel table'),'Prognosegüte je Run','vergleich_prognoseguete_tabelle.png');
+}
+
+// Delegated handler for every download button (charts + tables).
+document.addEventListener('click', async (e)=>{
+  const b=e.target.closest('.dlbtn'); if(!b) return;
+  if(b.id==='cmpExportAll'){ e.preventDefault(); await downloadAllComparison(); return; }
+  if(b.dataset.canvas){ const spec=exportSpecs[b.dataset.canvas];
+    if(spec) downloadChartPNG(spec, slug(spec.title||b.dataset.canvas)+'.png'); return; }
+  if(b.dataset.table){ const panel=document.getElementById(b.dataset.table);
+    htmlTableToPNG(panel&&panel.querySelector('table'), b.dataset.title||'', slug(b.dataset.title||b.dataset.table)+'.png'); }
+});
+
+document.getElementById('kpiSelect').addEventListener('change', drawExplorer);
+document.getElementById('decSelect').addEventListener('change', drawDecisions);
+
+// Run selector — populated from the registry the aggregator ships in `d.runs`.
+// Changing it re-points the live stream at that run (active or a frozen one).
+const runSelect = document.getElementById('runSelect');
+function populateRunSelect(d){
+  const runs = (d && d.runs) || [];
+  if (!runs.length){ runSelect.style.display='none'; return; }
+  runSelect.style.display='';
+  // If we haven't pinned a run yet, follow whichever run this payload describes.
+  if (selectedRun == null && d.run && d.run.id != null) selectedRun = String(d.run.id);
+  const sig = runs.map(r=>`${r.id}:${r.label}:${r.activeNow?'A':''}`).join('|');
+  if (runSelect.dataset.sig !== sig){
+    runSelect.dataset.sig = sig;
+    runSelect.innerHTML = runs.map(r=>{
+      const tag = r.activeNow ? ' (live)' : '';
+      return `<option value="${r.id}">${r.label}${tag}</option>`;
+    }).join('');
+  }
+  if (selectedRun != null) runSelect.value = selectedRun;
+}
+runSelect.addEventListener('change', ()=>{ selectedRun = runSelect.value; reconnect(); });
+
+// live connection (SSE) with polling fallback
+const dot = document.getElementById('dot'), livetxt = document.getElementById('livetxt');
+function setLive(on){ dot.classList.toggle('on',on); livetxt.textContent = on?'live':'getrennt — poll'; }
+const runQuery = ()=> selectedRun==null ? '' : ('?run='+encodeURIComponent(selectedRun));
+let activeES = null;
+function connect() {
+  try {
+    const es = new EventSource('/api/stream'+runQuery());
+    activeES = es;
+    es.addEventListener('update', e=>{ setLive(true); render(JSON.parse(e.data)); maybeLoadComparison(); });
+    es.onerror = ()=>{ setLive(false); es.close(); if(activeES===es){ setTimeout(connect,3000); poll(); } };
+  } catch { poll(); }
+}
+function reconnect(){ if(activeES){ try{activeES.close();}catch{} activeES=null; } poll(); connect(); }
+async function poll(){ try{ const r=await fetch('/api/data'+runQuery()); render(await r.json()); }catch{} }
+connect();
+loadComparison(); // cross-run comparison is independent of the selected run
+</script>
+</body>
+</html>
